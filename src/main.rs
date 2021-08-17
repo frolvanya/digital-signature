@@ -1,45 +1,50 @@
-use rand::rngs::OsRng;
+use rand::{self, Rng};
 
-use rsa::{PaddingScheme, PublicKey, RsaPrivateKey, RsaPublicKey};
-use sha2::{Digest, Sha512};
+use openssl::rsa::{Padding, Rsa};
+use openssl::symm::Cipher;
+
+fn encrypt_with_private_key(private_key: Vec<u8>, seed: String, message: &str) -> Vec<u8> {
+    let rsa = Rsa::private_key_from_pem_passphrase(&private_key, seed.as_bytes()).unwrap();
+    let mut buf: Vec<u8> = vec![0; rsa.size() as usize];
+
+    let _ = rsa
+        .private_encrypt(message.as_bytes(), &mut buf, Padding::PKCS1)
+        .unwrap();
+
+    buf
+}
+
+fn decrypt_with_public_key(public_key: Vec<u8>, data: Vec<u8>) -> String {
+    let rsa = Rsa::public_key_from_pem(&public_key).unwrap();
+    let mut buf = vec![0; rsa.size() as usize];
+
+    let _ = rsa.public_decrypt(&data, &mut buf, Padding::PKCS1).unwrap();
+
+    String::from_utf8(buf)
+        .unwrap()
+        .trim_matches(char::from(0))
+        .to_string()
+}
 
 fn main() {
-    // Initialization of the main variables
-    let mut rng = OsRng;
-    let padding = PaddingScheme::new_pkcs1v15_encrypt();
-
-    let private_key = RsaPrivateKey::new(&mut rng, 2048).expect("failed to generate a key");
-    let public_key = RsaPublicKey::from(&private_key);
-
-    // First Part
-
+    let seed: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect();
     let message = "Message";
 
-    let mut hasher = Sha512::new(); // Message = M
-    hasher.update(message);
+    let rsa = Rsa::generate(2048).unwrap();
+    let private_key = rsa
+        .private_key_to_pem_passphrase(Cipher::aes_256_cbc(), seed.as_bytes())
+        .unwrap();
+    let public_key = rsa.public_key_to_pem().unwrap();
 
-    let message_hash = format!("{:x}", hasher.finalize()); // Hash(M) = Mh
-    let bytes_message_hash = message_hash.as_bytes();
+    let encrypted_message = encrypt_with_private_key(private_key, seed, message);
+    let decrypted_message = decrypt_with_public_key(public_key, encrypted_message.clone());
 
-    let signature = private_key
-        .encrypt(&mut rng, padding, &bytes_message_hash[..])
-        .expect("failed to encrypt"); // Encrypt(Mh, private_key) = Signature
-
-    println!("{:?}", signature);
-
-    // Second Part
-
-    let padding = PaddingScheme::new_pkcs1v15_encrypt();
-    let another_message = "Message"; // Message = M
-
-    let mut hasher = Sha512::new();
-    hasher.update(another_message);
-
-    let another_message_hash = format!("{:x}", hasher.finalize()); // Hash(M) = Mh
-    let bytes_another_message_hash = another_message_hash.as_bytes();
-
-    let encrypted_another_message =
-        public_key.encrypt(&mut rng, padding, &bytes_another_message_hash[..]); // Decrypt(Signature, public_key) = Mh'
-
-    println!("{:?}\n\n\n{:?}", signature, encrypted_another_message);
+    println!(
+        "ENCRYPTED MESSAGE: {:?}\n\n\nDECRYPTED MESSAGE: {}",
+        encrypted_message, decrypted_message
+    );
 }
