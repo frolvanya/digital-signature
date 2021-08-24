@@ -29,7 +29,8 @@ fn decrypt_with_public_key(data: Vec<u8>, public_key: PublicKey) -> Vec<u8> {
     let rsa = Rsa::public_key_from_pem(&public_key.0).unwrap();
     let mut buf = vec![0; rsa.size() as usize];
 
-    let _ = rsa.public_decrypt(&data, &mut buf, Padding::PKCS1).unwrap();
+    let buf_actual_len = rsa.public_decrypt(&data, &mut buf, Padding::PKCS1).unwrap();
+    buf.truncate(buf_actual_len);
 
     buf
 }
@@ -44,14 +45,10 @@ fn create_signature(message: &str, private_key: PrivateKey) -> serde_json::Value
 }
 
 fn message_verification(message_with_signature: serde_json::Value, public_key: PublicKey) -> bool {
-    let mut decrypted_message_hash = decrypt_with_public_key(
+    let decrypted_message_hash = decrypt_with_public_key(
         hex_to_bytes(message_with_signature["signature"].as_str().unwrap()).unwrap(),
         public_key,
     );
-
-    while decrypted_message_hash.last().unwrap() == &0 {
-        decrypted_message_hash.pop();
-    }
 
     sha512_hash(message_with_signature["message"].as_str().unwrap()) == decrypted_message_hash
 }
@@ -79,7 +76,7 @@ fn hex_to_bytes(s: &str) -> Option<Vec<u8>> {
 
 fn main() {
     let (public_key, private_key) = generate_keys();
-    let message = "Message";
+    let message = "Messagdajskdalsdjalksjdkljdlajsdalksdjaklsjde";
 
     let message_to_send = create_signature(message, private_key);
 
