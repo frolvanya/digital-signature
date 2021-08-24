@@ -1,30 +1,21 @@
-use rand::{self, Rng};
-
 use openssl::rsa::{Padding, Rsa};
-use openssl::symm::Cipher;
-
+use serde_json::json;
 use sha2::{Digest, Sha512};
 
-use serde_json::json;
+struct PublicKey(Vec<u8>);
+struct PrivateKey(Vec<u8>);
 
-fn generate_keys() -> (String, Vec<u8>, Vec<u8>) {
+fn generate_keys() -> (PublicKey, PrivateKey) {
     let rsa = Rsa::generate(2048).unwrap();
-    let seed: String = rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect();
 
-    let public_key = rsa.public_key_to_pem().unwrap();
-    let private_key = rsa
-        .private_key_to_pem_passphrase(Cipher::aes_256_cbc(), seed.as_bytes())
-        .unwrap();
+    let public_key = PublicKey(rsa.public_key_to_pem().unwrap());
+    let private_key = PrivateKey(rsa.private_key_to_pem().unwrap());
 
-    (seed, public_key, private_key)
+    (public_key, private_key)
 }
 
-fn encrypt_with_private_key(private_key: Vec<u8>, seed: String, message: &[u8]) -> Vec<u8> {
-    let rsa = Rsa::private_key_from_pem_passphrase(&private_key, seed.as_bytes()).unwrap();
+fn encrypt_with_private_key(private_key: PrivateKey, message: &[u8]) -> Vec<u8> {
+    let rsa = Rsa::private_key_from_pem(&private_key.0).unwrap();
     let mut buf: Vec<u8> = vec![0; rsa.size() as usize];
 
     let _ = rsa
@@ -34,8 +25,8 @@ fn encrypt_with_private_key(private_key: Vec<u8>, seed: String, message: &[u8]) 
     buf
 }
 
-fn decrypt_with_public_key(data: Vec<u8>, public_key: Vec<u8>) -> Vec<u8> {
-    let rsa = Rsa::public_key_from_pem(&public_key).unwrap();
+fn decrypt_with_public_key(data: Vec<u8>, public_key: PublicKey) -> Vec<u8> {
+    let rsa = Rsa::public_key_from_pem(&public_key.0).unwrap();
     let mut buf = vec![0; rsa.size() as usize];
 
     let _ = rsa.public_decrypt(&data, &mut buf, Padding::PKCS1).unwrap();
@@ -43,8 +34,8 @@ fn decrypt_with_public_key(data: Vec<u8>, public_key: Vec<u8>) -> Vec<u8> {
     buf
 }
 
-fn create_signature(message: &str, private_key: Vec<u8>, seed: String) -> serde_json::Value {
-    let signature = encrypt_with_private_key(private_key, seed, &sha512_hash(message));
+fn create_signature(message: &str, private_key: PrivateKey) -> serde_json::Value {
+    let signature = encrypt_with_private_key(private_key, &sha512_hash(message));
 
     json!({
         "message": message,
@@ -52,7 +43,7 @@ fn create_signature(message: &str, private_key: Vec<u8>, seed: String) -> serde_
     })
 }
 
-fn message_verification(message_with_signature: serde_json::Value, public_key: Vec<u8>) -> bool {
+fn message_verification(message_with_signature: serde_json::Value, public_key: PublicKey) -> bool {
     let mut decrypted_message_hash = decrypt_with_public_key(
         hex_to_bytes(message_with_signature["signature"].as_str().unwrap()).unwrap(),
         public_key,
@@ -62,11 +53,7 @@ fn message_verification(message_with_signature: serde_json::Value, public_key: V
         decrypted_message_hash.pop();
     }
 
-    if sha512_hash(message_with_signature["message"].as_str().unwrap()) == decrypted_message_hash {
-        return true;
-    }
-
-    false
+    sha512_hash(message_with_signature["message"].as_str().unwrap()) == decrypted_message_hash
 }
 
 fn sha512_hash(text: &str) -> Vec<u8> {
@@ -91,10 +78,10 @@ fn hex_to_bytes(s: &str) -> Option<Vec<u8>> {
 }
 
 fn main() {
-    let (seed, public_key, private_key) = generate_keys();
+    let (public_key, private_key) = generate_keys();
     let message = "Message";
 
-    let message_to_send = create_signature(message, private_key, seed);
+    let message_to_send = create_signature(message, private_key);
 
     if message_verification(message_to_send, public_key) {
         println!("Message verification successful!");
