@@ -76,7 +76,7 @@ fn hex_to_bytes(s: &str) -> Option<Vec<u8>> {
 
 fn main() {
     let (public_key, private_key) = generate_keys();
-    let message = "Messagdajskdalsdjalksjdkljdlajsdalksdjaklsjde";
+    let message = "Message";
 
     let message_to_send = create_signature(message, private_key);
 
