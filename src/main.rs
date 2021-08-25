@@ -14,13 +14,14 @@ fn generate_keys() -> (PublicKey, PrivateKey) {
     (public_key, private_key)
 }
 
-fn encrypt_with_private_key(private_key: PrivateKey, message: &[u8]) -> Vec<u8> {
+fn encrypt_with_private_key(message: &[u8], private_key: PrivateKey) -> Vec<u8> {
     let rsa = Rsa::private_key_from_pem(&private_key.0).unwrap();
     let mut buf: Vec<u8> = vec![0; rsa.size() as usize];
 
-    let _ = rsa
+    let buf_actual_len = rsa
         .private_encrypt(message, &mut buf, Padding::PKCS1)
         .unwrap();
+    buf.truncate(buf_actual_len);
 
     buf
 }
@@ -36,7 +37,7 @@ fn decrypt_with_public_key(data: Vec<u8>, public_key: PublicKey) -> Vec<u8> {
 }
 
 fn create_signature(message: &str, private_key: PrivateKey) -> serde_json::Value {
-    let signature = encrypt_with_private_key(private_key, &sha512_hash(message));
+    let signature = encrypt_with_private_key(&sha512_hash(message), private_key);
 
     json!({
         "message": message,
