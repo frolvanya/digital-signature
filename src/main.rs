@@ -1,9 +1,33 @@
 use openssl::rsa::{Padding, Rsa};
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
+#[derive(Serialize, Deserialize)]
+struct SignedMessage {
+    message: String,
+    signature: String,
+}
 struct PublicKey(Vec<u8>);
 struct PrivateKey(Vec<u8>);
+
+impl SignedMessage {
+    fn new(message: String, private_key: PrivateKey) -> Self {
+        SignedMessage {
+            message: message.clone(),
+            signature: encrypt_with_private_key(&sha512_hash(message.as_str()), private_key)
+                .iter()
+                .map(|element| format!("{:02X}", element))
+                .collect::<Vec<String>>()
+                .join(""),
+        }
+    }
+
+    // fn new() -> Self {
+    //     SignedMessage { message: String::from(""), signature: String::from("") }
+    // }
+
+    // fn load(message: String, signature: Vec<u8>, public_key: PublicKey) -> Result<Self, VerificationError> {}
+}
 
 fn generate_keys() -> (PublicKey, PrivateKey) {
     let rsa = Rsa::generate(2048).unwrap();
@@ -36,22 +60,24 @@ fn decrypt_with_public_key(data: Vec<u8>, public_key: PublicKey) -> Vec<u8> {
     buf
 }
 
-fn create_signature(message: &str, private_key: PrivateKey) -> serde_json::Value {
-    let signature = encrypt_with_private_key(&sha512_hash(message), private_key);
+fn create_signature(message: &str, private_key: PrivateKey) -> SignedMessage {
+    SignedMessage::new(message.to_string(), private_key)
 
-    json!({
-        "message": message,
-        "signature": signature.iter().map(|element| format!("{:02X}", element)).collect::<Vec<String>>().join(""),
-    })
+    // let signature = encrypt_with_private_key(&sha512_hash(message), private_key);
+
+    // json!({
+    //     "message": message,
+    //     "signature": signature.iter().map(|element| format!("{:02X}", element)).collect::<Vec<String>>().join(""),
+    // })
 }
 
-fn message_verification(message_with_signature: serde_json::Value, public_key: PublicKey) -> bool {
+fn message_verification(signed_message: SignedMessage, public_key: PublicKey) -> bool {
     let decrypted_message_hash = decrypt_with_public_key(
-        hex_to_bytes(message_with_signature["signature"].as_str().unwrap()).unwrap(),
+        hex_to_bytes(signed_message.signature.as_str()).unwrap(),
         public_key,
     );
 
-    sha512_hash(message_with_signature["message"].as_str().unwrap()) == decrypted_message_hash
+    sha512_hash(signed_message.message.as_str()) == decrypted_message_hash
 }
 
 fn sha512_hash(text: &str) -> Vec<u8> {
