@@ -13,6 +13,7 @@ struct PrivateKey(Vec<u8>);
 struct VerificationError(String);
 
 impl SignedMessage {
+    // CREATE NEW SIGNED MESSAGE
     fn new(message: String, private_key: PrivateKey) -> Self {
         SignedMessage {
             message: message.clone(),
@@ -24,6 +25,7 @@ impl SignedMessage {
         }
     }
 
+    // VERIFICATE SIGNED MESSAGE
     fn load(
         message: String,
         signature: String,
@@ -44,6 +46,7 @@ impl SignedMessage {
     }
 }
 
+// GENERATE RSA PUBLIC&PRIVATE KEYS
 fn generate_keys() -> (PublicKey, PrivateKey) {
     let rsa = Rsa::generate(2048).unwrap();
 
@@ -53,6 +56,7 @@ fn generate_keys() -> (PublicKey, PrivateKey) {
     (public_key, private_key)
 }
 
+// ENCRYPT MESSAGE WITH PRIVATE KEY
 fn encrypt_with_private_key(message: &[u8], private_key: PrivateKey) -> Vec<u8> {
     let rsa = Rsa::private_key_from_pem(&private_key.0).unwrap();
     let mut buf: Vec<u8> = vec![0; rsa.size() as usize];
@@ -65,6 +69,7 @@ fn encrypt_with_private_key(message: &[u8], private_key: PrivateKey) -> Vec<u8> 
     buf
 }
 
+// DECRYPT MESSAGE WITH PUBLIC KEY
 fn decrypt_with_public_key(data: Vec<u8>, public_key: PublicKey) -> Vec<u8> {
     let rsa = Rsa::public_key_from_pem(&public_key.0).unwrap();
     let mut buf = vec![0; rsa.size() as usize];
@@ -75,6 +80,7 @@ fn decrypt_with_public_key(data: Vec<u8>, public_key: PublicKey) -> Vec<u8> {
     buf
 }
 
+// MAKE A SHA512 HASH FROM #STRING#
 fn sha512_hash(text: &str) -> Vec<u8> {
     let mut hasher = Sha512::new();
     hasher.update(text);
@@ -98,10 +104,11 @@ fn hex_to_bytes(s: &str) -> Option<Vec<u8>> {
 
 fn main() {
     let (public_key, private_key) = generate_keys();
-    let message = "Message";
+    let message = "Message"; // USER'S MESSAGE
 
-    let signed_message = SignedMessage::new(message.to_string(), private_key);
+    let signed_message = SignedMessage::new(message.to_string(), private_key); // SIGN MESSAGE
 
+    // VERIFICATE MESSAGE
     match SignedMessage::load(
         signed_message.message.to_string(),
         signed_message.signature,
